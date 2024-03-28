@@ -10,6 +10,7 @@ import ru.panic.smsactivateservice.number.model.Number;
 public interface NumberToNumberDtoMapper {
     @Mappings({
             @Mapping(target = "id", source = "id"),
+            @Mapping(target = "status", source = "status"),
             @Mapping(target = "phoneNumber", source = "phoneNumber"),
             @Mapping(target = "activationCost", source = "activationCost"),
             @Mapping(target = "canGetAnotherSms", source = "canGetAnotherSms"),

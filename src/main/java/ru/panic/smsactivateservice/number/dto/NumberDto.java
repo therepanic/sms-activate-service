@@ -9,6 +9,8 @@ public class NumberDto {
     @JsonProperty("activationId")
     private Long id;
 
+    private String status;
+
     private String phoneNumber;
 
     private String activationCost;

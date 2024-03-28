@@ -7,6 +7,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import ru.panic.smsactivateservice.number.model.type.NumberOperator;
 
+import java.util.Date;
+import java.util.List;
+
 @Entity(name = "numbers_table")
 @Data
 @Builder
@@ -16,6 +19,9 @@ public class Number {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "status", nullable = false)
+    private String status;
 
     @Column(name = "phone_number", nullable = true)
     private String phoneNumber;
@@ -33,5 +39,15 @@ public class Number {
     private NumberOperator activationOperator;
 
     @Column(name = "activation_time", nullable = false)
-    private String activationTime;
+    private Date activationTime;
+
+    @Column(name = "last_seen_updated", nullable = false)
+    private Boolean isLastSeenUpdated;
+
+    @OneToMany(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JoinColumn(name = "number_id")
+    private List<Sms> smsList;
+
+    @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private Merchant merchant;
 }
