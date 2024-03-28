@@ -163,6 +163,29 @@ public class NumberBaseService implements NumberService {
     }
 
     @Override
+    public NumberActivationState getActivationStatus(String apiKey, long id) {
+        merchantSecurity.secureByApiKey(apiKey);
+
+        Number number = numberRepository.findById(id).orElseThrow();
+
+        switch (number.getStatus()) {
+            case "1" -> {
+                return NumberActivationState.STATUS_WAIT_CODE;
+            }
+
+            case "3" -> {
+                return NumberActivationState.STATUS_WAIT_RESEND;
+            }
+
+            case "6", "8" -> {
+                return NumberActivationState.STATUS_OK;
+            }
+        }
+
+        return null;
+    }
+
+    @Override
     public List<NumberActivationDataDto> getAllActivationData(String apiKey) {
         merchantSecurity.secureByApiKey(apiKey);
 

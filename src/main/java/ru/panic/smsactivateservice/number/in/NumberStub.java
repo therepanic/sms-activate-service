@@ -62,7 +62,7 @@ public class NumberStub {
             }
 
             case "getStatus" -> {
-
+                return numberBaseService.getActivationStatus(apiKey, id);
             }
         }
 

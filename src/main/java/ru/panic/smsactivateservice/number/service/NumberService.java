@@ -21,6 +21,7 @@ public interface NumberService {
                              String country);
     NumberActivationState handleSetActivationStatus(String apiKey, long id,
                                                     String status);
+    NumberActivationState getActivationStatus(String apiKey, long id);
     List<NumberActivationDataDto> getAllActivationData(String apiKey);
     List<Map<String, Long>> getAllServiceNumberCount(String apiKey);
     Map<String, Long> getBalance(String apiKey);
