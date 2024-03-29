@@ -1,5 +1,6 @@
 package ru.panic.smsactivateservice.number.repository;
 
+import jakarta.transaction.Transactional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -16,10 +17,11 @@ public interface NumberRepository extends JpaRepository<Number, Long> {
     @Query("SELECT n.isLastSeenUpdated FROM numbers_table n WHERE n.id = :id")
     Boolean findIsLastSeenUpdatedById(@Param("id") long id);
 
-    @Query("UPDATE numbers_table SET isLastSeenUpdated = :isLastSeenUpdated WHERE id = :id")
-    @Modifying
-    void updateIsLastSeenUpdatedById(@Param("isLastSeenUpdated") boolean isLastSeenUpdated,
-                                     @Param("id") long id);
+//    @Query(value = "UPDATE numbers_table SET isLastSeenUpdated = :isLastSeenUpdated WHERE id = :id")
+//    @Modifying
+//    @Transactional
+//    void updateIsLastSeenUpdatedById(@Param("isLastSeenUpdated") boolean isLastSeenUpdated,
+//                                     @Param("id") long id);
 
     @Query("SELECT n FROM numbers_table n WHERE n.merchant = :merchant AND n.status = :firstStatus OR " +
             "n.merchant = :merchant AND n.status = :secondStatus ORDER BY n.activationTime DESC")

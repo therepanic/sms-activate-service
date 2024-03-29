@@ -4,5 +4,5 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public enum NumberService {
     @JsonProperty("tg")
-    TELEGRAM
+    tg
 }

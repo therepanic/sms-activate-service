@@ -9,24 +9,22 @@ import lombok.Setter;
 @Setter
 @Builder
 public class GetAllServicePriceResponse {
-    @JsonProperty("tg")
-    private TelegramServicePrice telegramServicePrice;
+    @JsonProperty("0")
+    private CountryServicePrice russianCountryServicePrice;
 
     @Getter
     @Setter
     @Builder
-    public static class TelegramServicePrice {
-        @JsonProperty("0")
-        private CountryServicePrice russianCountryServicePrice;
+    public static class ServicePrice {
+        private int cost;
+        private int count;
     }
 
     @Getter
     @Setter
     @Builder
     public static class CountryServicePrice {
-        private int count;
-        private int price;
-        @JsonProperty("retail_price")
-        private int retailPrice;
+        @JsonProperty("tg")
+        private ServicePrice telegramServicePrice;
     }
 }

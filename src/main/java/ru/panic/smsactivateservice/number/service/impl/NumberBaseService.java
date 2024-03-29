@@ -1,7 +1,12 @@
 package ru.panic.smsactivateservice.number.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,10 +24,7 @@ import ru.panic.smsactivateservice.number.model.Sms;
 import ru.panic.smsactivateservice.number.model.type.NumberActivationOrderStatus;
 import ru.panic.smsactivateservice.number.model.type.NumberActivationState;
 import ru.panic.smsactivateservice.number.model.type.NumberOperator;
-import ru.panic.smsactivateservice.number.payload.CreateNumberSmsRequest;
-import ru.panic.smsactivateservice.number.payload.GetAllAvailableCountryResponse;
-import ru.panic.smsactivateservice.number.payload.GetAllAvailableOperatorResponse;
-import ru.panic.smsactivateservice.number.payload.GetAllServicePriceResponse;
+import ru.panic.smsactivateservice.number.payload.*;
 import ru.panic.smsactivateservice.number.repository.MerchantRepository;
 import ru.panic.smsactivateservice.number.repository.NumberRepository;
 import ru.panic.smsactivateservice.number.repository.SmsRepository;
@@ -44,24 +46,33 @@ public class NumberBaseService implements NumberService {
     private final SmsToSmsDtoMapperImpl smsToSmsDtoMapper;
     private final NumberActivationOrderComponent numberActivationOrderComponent;
     private final NumberActivationComponent numberActivationComponent;
+    private final ObjectMapper objectMapper;
 
-    @Transactional(isolation = Isolation.READ_COMMITTED)
+
+
     @Override
-    public NumberDto getWithLastSeenUpdate(long id) {
+    public GetStatusWithLastSeenUpdateResponse getStatusWithLastSeenUpdate(long id) {
             while (true) {
                 boolean isLastSeenUpdated = numberRepository.findIsLastSeenUpdatedById(id);
 
                 if (isLastSeenUpdated) {
-                    numberRepository.updateIsLastSeenUpdatedById(false, id);
+                    Number number = numberRepository.findById(id).orElse(null);
 
-                    NumberDto responseNumberDto = numberToNumberDtoMapper.numberToNumberDto(numberRepository.findById(id).orElse(null));
+                    number.setIsLastSeenUpdated(false);
+
+                    numberRepository.save(number);
+
+                    NumberDto responseNumberDto = numberToNumberDtoMapper.numberToNumberDto(number);
 
                     switch (responseNumberDto.getStatus()) {
                         case "3" -> responseNumberDto.setStatus("2");
-                        case "6", "8" -> responseNumberDto.setStatus("3");
+                        case "6"-> responseNumberDto.setStatus("3");
+                        case "8" -> responseNumberDto.setStatus("4");
                     }
 
-                    return responseNumberDto;
+                    return GetStatusWithLastSeenUpdateResponse.builder()
+                            .status(responseNumberDto.getStatus())
+                            .build();
                 } else {
                     try {
                         Thread.sleep(5000);
@@ -72,10 +83,9 @@ public class NumberBaseService implements NumberService {
             }
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED)
     @Override
-    public NumberDto handleActivate(String apiKey,
-                                    ru.panic.smsactivateservice.number.model.type.NumberService service, String country) {
+    public ResponseEntity<String> handleActivateV2(String apiKey,
+                                                 ru.panic.smsactivateservice.number.model.type.NumberService service, String country) throws JsonProcessingException {
         // Создаем новый номер в системе
 
         merchantSecurity.secureByApiKey(apiKey);
@@ -88,7 +98,7 @@ public class NumberBaseService implements NumberService {
                 .countryCode("0")
                 .canGetAnotherSms("0")
                 .activationTime(new Date())
-                .isLastSeenUpdated(true)
+                .isLastSeenUpdated(false)
                 .merchant(merchantRepository.findByApiKey(apiKey).orElseThrow())
                 .build();
 
@@ -97,6 +107,7 @@ public class NumberBaseService implements NumberService {
         numberActivationOrderComponent.getNumberActivationOrderList().add(NumberActivationOrder.builder()
                 .numberId(newNumber.getId())
                 .status(NumberActivationOrderStatus.FREE)
+                .timestamp(System.currentTimeMillis())
                 .build());
 
         // Ждем, пока физическое устройство начнет обработку заявки на активацию
@@ -127,7 +138,9 @@ public class NumberBaseService implements NumberService {
             if (numberIdPhoneNumberForDelete != null) {
                 numberActivationOrderComponent.getNumberActivationOrderList().remove(numberIdPhoneNumberForDelete);
 
-                return numberToNumberDtoMapper.numberToNumberDto(newNumber);
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(objectMapper.writeValueAsString(numberToNumberDtoMapper.numberToNumberDto(newNumber)));
             }
 
             try {
@@ -138,9 +151,76 @@ public class NumberBaseService implements NumberService {
         }
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED)
     @Override
-    public NumberActivationState handleSetActivationStatus(String apiKey, long id, String status) {
+    public ResponseEntity<String> handleActivate(String apiKey, ru.panic.smsactivateservice.number.model.type.NumberService service, String country) throws JsonProcessingException {
+// Создаем новый номер в системе
+
+        merchantSecurity.secureByApiKey(apiKey);
+
+        Number newNumber = Number.builder()
+                .status("1")
+                .activationCost("9")
+                .phoneNumber(null)
+                .activationOperator(NumberOperator.ROSTELECOM)
+                .countryCode("0")
+                .canGetAnotherSms("0")
+                .activationTime(new Date())
+                .isLastSeenUpdated(false)
+                .merchant(merchantRepository.findByApiKey(apiKey).orElseThrow())
+                .build();
+
+        numberRepository.save(newNumber);
+
+        numberActivationOrderComponent.getNumberActivationOrderList().add(NumberActivationOrder.builder()
+                .numberId(newNumber.getId())
+                .status(NumberActivationOrderStatus.FREE)
+                .timestamp(System.currentTimeMillis())
+                .build());
+
+        // Ждем, пока физическое устройство начнет обработку заявки на активацию
+
+        while (true) {
+            NumberActivationOrder numberIdPhoneNumberForDelete = null;
+
+            // Ищем обработанную заявку устройством, если такая есть
+
+            for (NumberActivationOrder numberActivationOrder : numberActivationOrderComponent.getNumberActivationOrderList()) {
+                if (numberActivationOrder.getNumberId() == newNumber.getId()
+                        && numberActivationOrder.getPhoneNumber() != null) {
+
+                    numberIdPhoneNumberForDelete = numberActivationOrder;
+
+                    newNumber.setPhoneNumber(numberActivationOrder.getPhoneNumber());
+
+                    numberRepository.save(newNumber);
+
+                    //Найдя нужный ордер на активацию, прекращаем поиск
+
+                    break;
+                }
+            }
+
+            // Если физическое устройство обработало заявку, завершаем цикл while
+
+            if (numberIdPhoneNumberForDelete != null) {
+                numberActivationOrderComponent.getNumberActivationOrderList().remove(numberIdPhoneNumberForDelete);
+
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body("ACCESS_NUMBER: " + newNumber.getId() + ": " + newNumber.getPhoneNumber());
+            }
+
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                log.warn(e.getMessage());
+            }
+        }
+    }
+
+    //@Transactional(isolation = Isolation.READ_COMMITTED)
+    @Override
+    public ResponseEntity<String> handleSetActivationStatus(String apiKey, long id, String status) {
         merchantSecurity.secureByApiKey(apiKey);
 
         Number number = numberRepository.findById(id).orElseThrow();
@@ -152,41 +232,64 @@ public class NumberBaseService implements NumberService {
 
         switch (status) {
             case "3" -> {
-                return NumberActivationState.ACCESS_RETRY_GET;
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(String.valueOf(NumberActivationState.ACCESS_RETRY_GET));
             }
             case "6", "8" -> {
-                return NumberActivationState.ACCESS_READY;
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(String.valueOf(NumberActivationState.ACCESS_READY));
             }
         }
 
-        return null;
+        return ResponseEntity.badRequest().build();
     }
 
     @Override
-    public NumberActivationState getActivationStatus(String apiKey, long id) {
+    public ResponseEntity<String> getActivationStatus(String apiKey, long id) {
         merchantSecurity.secureByApiKey(apiKey);
 
         Number number = numberRepository.findById(id).orElseThrow();
 
+        if (number.getStatus().equals("1")) {
+            number.setIsLastSeenUpdated(true);
+
+            numberRepository.save(number);
+        }
+
         switch (number.getStatus()) {
             case "1" -> {
-                return NumberActivationState.STATUS_WAIT_CODE;
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(String.valueOf(NumberActivationState.STATUS_WAIT_CODE));
             }
 
             case "3" -> {
-                return NumberActivationState.STATUS_WAIT_RESEND;
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(String.valueOf(NumberActivationState.STATUS_WAIT_RESEND));
             }
 
-            case "6", "8" -> {
-                return NumberActivationState.STATUS_OK;
+            case "6" -> {
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(NumberActivationState.STATUS_OK + ":" + number.getSmsList().get(number.getSmsList().size() - 1)
+                                .getText());
+            }
+
+            case "8" -> {
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(String.valueOf(NumberActivationState.STATUS_CANCEL));
             }
         }
 
-        return null;
+        return ResponseEntity.badRequest().build();
     }
 
     @Override
-    public List<NumberActivationDataDto> getAllActivationData(String apiKey) {
+    public ResponseEntity<String> getAllActivationData(String apiKey) throws JsonProcessingException {
         merchantSecurity.secureByApiKey(apiKey);
 
         List<Number> numberList = numberRepository.findAllByMerchantAndStatusOrMerchantAndStatusOrderByActivationTimeDesc(
@@ -196,73 +299,90 @@ public class NumberBaseService implements NumberService {
                         .orElseThrow())
                 .orElseThrow();
 
-        return numberList.stream()
-                .map(numberToNumberActivationDataDtoMapper::numberToNumberActivationDataDto)
-                .toList();
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(objectMapper.writeValueAsString(numberList.stream()
+                        .map(numberToNumberActivationDataDtoMapper::numberToNumberActivationDataDto)
+                        .toList()));
     }
 
     @Override
-    public List<Map<String, Long>> getAllServiceNumberCount(String apiKey) {
+    public ResponseEntity<String> getAllServiceNumberCount(String apiKey) throws JsonProcessingException {
         merchantSecurity.secureByApiKey(apiKey);
 
-        return List.of(Map.of("tg_0", numberActivationComponent.getTelegramNumberCount()));
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(objectMapper.writeValueAsString(List.of(Map.of("tg_0", numberActivationComponent.getTelegramNumberCount()))));
     }
 
     @Override
-    public Map<String, Long> getBalance(String apiKey) {
+    public ResponseEntity<String> getBalance(String apiKey) {
         merchantSecurity.secureByApiKey(apiKey);
 
-        return Map.of("ACCESS_BALANCE", 9999L);
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body("ACCESS_BALANCE: 9999");
     }
 
     @Override
-    public GetAllAvailableOperatorResponse getAllAvailableOperator(String apiKey) {
+    public ResponseEntity<String> getAllAvailableOperator(String apiKey) throws JsonProcessingException {
         merchantSecurity.secureByApiKey(apiKey);
 
-        return GetAllAvailableOperatorResponse.builder()
-                .status("success")
-                .countryOperator(GetAllAvailableOperatorResponse.CountryOperator.builder()
-                        .russianCountryOperators(List.of("rostelecom"))
-                        .build())
-                .build();
-    }
-
-    @Override
-    public GetAllAvailableCountryResponse getAllAvailableCountry(String apiKey) {
-        merchantSecurity.secureByApiKey(apiKey);
-
-        return GetAllAvailableCountryResponse.builder()
-                .russianCountry(GetAllAvailableCountryResponse.AvailableCountry.builder()
-                        .id(0)
-                        .rus("Россия")
-                        .eng("Russia")
-                        .chn("俄罗斯")
-                        .visible(1)
-                        .retry(1)
-                        .rent(1)
-                        .multiService(1)
-                        .build())
-                .build();
-    }
-
-    @Override
-    public GetAllServicePriceResponse getAllServicePrice(String apiKey) {
-        merchantSecurity.secureByApiKey(apiKey);
-
-        return GetAllServicePriceResponse.builder()
-                .telegramServicePrice(GetAllServicePriceResponse.TelegramServicePrice.builder()
-                        .russianCountryServicePrice(GetAllServicePriceResponse.CountryServicePrice.builder()
-                                .price(5)
-                                .count(9999)
-                                .retailPrice(5)
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(objectMapper.writeValueAsString(GetAllAvailableOperatorResponse.builder()
+                        .status("success")
+                        .countryOperator(GetAllAvailableOperatorResponse.CountryOperator.builder()
+                                .russianCountryOperators(List.of("rostelecom"))
                                 .build())
-                        .build())
-                .build();
+                        .build()));
+    }
+
+    @Override
+    public ResponseEntity<String> getAllAvailableCountry(String apiKey) throws JsonProcessingException {
+        merchantSecurity.secureByApiKey(apiKey);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(objectMapper.writeValueAsString(GetAllAvailableCountryResponse.builder()
+                        .russianCountry(GetAllAvailableCountryResponse.AvailableCountry.builder()
+                                .id(0)
+                                .rus("Россия")
+                                .eng("Russia")
+                                .chn("俄罗斯")
+                                .visible(1)
+                                .retry(1)
+                                .rent(1)
+                                .multiService(1)
+                                .build())
+                        .build()));
+    }
+
+    @Override
+    public ResponseEntity<String> getAllServicePrice(String apiKey) throws JsonProcessingException {
+        merchantSecurity.secureByApiKey(apiKey);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(objectMapper.writeValueAsString(GetAllServicePriceResponse.builder()
+                                .russianCountryServicePrice(GetAllServicePriceResponse.CountryServicePrice.builder()
+                                        .telegramServicePrice(GetAllServicePriceResponse.ServicePrice.builder()
+                                                .cost(5)
+                                                .count(9999)
+                                                .build())
+                                        .build())
+                        .build()));
     }
 
     @Override
     public List<NumberActivationOrder> getAllActivationOrder() {
         return numberActivationOrderComponent.getNumberActivationOrderList();
+    }
+
+    @Override
+    public Object getRandomActivationOrderExactly() {
+        return numberActivationOrderComponent.getAndMarkAsBusy()
+                .orElse(GetRandomActivationOrderExactlyResponse.builder().status("null").build());
     }
 
     @Override
@@ -291,6 +411,10 @@ public class NumberBaseService implements NumberService {
     public SmsDto createSms(CreateNumberSmsRequest createNumberSmsRequest) {
         Number principalNumber = numberRepository.findById(createNumberSmsRequest.getActivationId())
                 .orElse(null);
+
+        principalNumber.setStatus("6");
+
+        numberRepository.save(principalNumber);
 
         Sms newSms = Sms.builder()
                 .text(createNumberSmsRequest.getText())

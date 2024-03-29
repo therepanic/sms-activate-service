@@ -2,6 +2,7 @@ package ru.panic.smsactivateservice.number.security;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import ru.panic.smsactivateservice.number.exception.MerchantNotAuthorizedException;
 import ru.panic.smsactivateservice.number.repository.MerchantRepository;
 
 @Component
@@ -12,7 +13,7 @@ public class MerchantSecurity {
 
     public void secureByApiKey(String apiKey) {
         if (!merchantRepository.existsByApiKey(apiKey)) {
-            throw new RuntimeException();
+            throw new MerchantNotAuthorizedException("Not authorized");
         }
     }
 }
