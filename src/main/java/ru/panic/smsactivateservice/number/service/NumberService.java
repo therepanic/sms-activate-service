@@ -35,7 +35,7 @@ public interface NumberService {
 
     void updateActivationOrderStatus(long id, NumberActivationOrderStatus status);
 
-    void updateActivationOrderPhoneNumber(long id, String phoneNumber);
+    UpdateActivationOrderPhoneNumberResponse updateActivationOrderPhoneNumber(long id, String phoneNumber);
 
     SmsDto createSms(CreateNumberSmsRequest createNumberSmsRequest);
 }

@@ -10,6 +10,7 @@ import ru.panic.smsactivateservice.number.model.type.NumberActivationOrderStatus
 import ru.panic.smsactivateservice.number.model.type.NumberService;
 import ru.panic.smsactivateservice.number.payload.CreateNumberSmsRequest;
 import ru.panic.smsactivateservice.number.payload.GetStatusWithLastSeenUpdateResponse;
+import ru.panic.smsactivateservice.number.payload.UpdateActivationOrderPhoneNumberResponse;
 import ru.panic.smsactivateservice.number.service.impl.NumberBaseService;
 
 import java.util.List;
@@ -42,16 +43,10 @@ public class NumberController {
         return numberBaseService.createSms(createNumberSmsRequest);
     }
 
-    @PatchMapping("/activationOrder/updateStatus")
-    public void updateActivationOrderStatus(@RequestParam("id") long id,
-                                            @RequestParam("status") NumberActivationOrderStatus status) {
-        numberBaseService.updateActivationOrderStatus(id, status);
-    }
-
     @PatchMapping("/activationOrder/updatePhoneNumber")
-    public void updateActivationOrderPhoneNumber(@RequestParam("id") long id,
-                                                 @RequestParam("phoneNumber") String phoneNumber) {
-        numberBaseService.updateActivationOrderPhoneNumber(id, phoneNumber);
+    public UpdateActivationOrderPhoneNumberResponse updateActivationOrderPhoneNumber(@RequestParam("id") long id,
+                                                                                     @RequestParam("phoneNumber") String phoneNumber) {
+        return numberBaseService.updateActivationOrderPhoneNumber(id, phoneNumber);
     }
 
 }

@@ -48,6 +48,6 @@ public class Number {
     @JoinColumn(name = "number_id")
     private List<Sms> smsList;
 
-    @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.PERSIST)
     private Merchant merchant;
 }

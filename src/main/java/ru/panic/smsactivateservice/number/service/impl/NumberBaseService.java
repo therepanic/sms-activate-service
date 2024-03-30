@@ -52,35 +52,31 @@ public class NumberBaseService implements NumberService {
 
     @Override
     public GetStatusWithLastSeenUpdateResponse getStatusWithLastSeenUpdate(long id) {
-            while (true) {
-                boolean isLastSeenUpdated = numberRepository.findIsLastSeenUpdatedById(id);
+        boolean isLastSeenUpdated = numberRepository.findIsLastSeenUpdatedById(id);
 
-                if (isLastSeenUpdated) {
-                    Number number = numberRepository.findById(id).orElse(null);
+        if (isLastSeenUpdated) {
+            Number number = numberRepository.findById(id).orElse(null);
 
-                    number.setIsLastSeenUpdated(false);
+            number.setIsLastSeenUpdated(false);
 
-                    numberRepository.save(number);
+            numberRepository.save(number);
 
-                    NumberDto responseNumberDto = numberToNumberDtoMapper.numberToNumberDto(number);
+            NumberDto responseNumberDto = numberToNumberDtoMapper.numberToNumberDto(number);
 
-                    switch (responseNumberDto.getStatus()) {
-                        case "3" -> responseNumberDto.setStatus("2");
-                        case "6"-> responseNumberDto.setStatus("3");
-                        case "8" -> responseNumberDto.setStatus("4");
-                    }
-
-                    return GetStatusWithLastSeenUpdateResponse.builder()
-                            .status(responseNumberDto.getStatus())
-                            .build();
-                } else {
-                    try {
-                        Thread.sleep(5000);
-                    } catch (InterruptedException e) {
-                        log.warn(e.getMessage());
-                    }
-                }
+            switch (responseNumberDto.getStatus()) {
+                case "3" -> responseNumberDto.setStatus("2");
+                case "6"-> responseNumberDto.setStatus("3");
+                case "8" -> responseNumberDto.setStatus("4");
             }
+
+            return GetStatusWithLastSeenUpdateResponse.builder()
+                    .status(responseNumberDto.getStatus())
+                    .build();
+        } else {
+            return GetStatusWithLastSeenUpdateResponse.builder()
+                    .status("null")
+                    .build();
+        }
     }
 
     @Override
@@ -88,7 +84,6 @@ public class NumberBaseService implements NumberService {
                                                  ru.panic.smsactivateservice.number.model.type.NumberService service, String country) throws JsonProcessingException {
         // Создаем новый номер в системе
 
-        merchantSecurity.secureByApiKey(apiKey);
 
         Number newNumber = Number.builder()
                 .status("1")
@@ -104,15 +99,19 @@ public class NumberBaseService implements NumberService {
 
         numberRepository.save(newNumber);
 
-        numberActivationOrderComponent.getNumberActivationOrderList().add(NumberActivationOrder.builder()
+        NumberActivationOrder newNumberActivationOrder = NumberActivationOrder.builder()
                 .numberId(newNumber.getId())
                 .status(NumberActivationOrderStatus.FREE)
                 .timestamp(System.currentTimeMillis())
-                .build());
+                .build();
+
+        numberActivationOrderComponent.getNumberActivationOrderList().add(newNumberActivationOrder);
 
         // Ждем, пока физическое устройство начнет обработку заявки на активацию
 
-        while (true) {
+        long timestamp = System.currentTimeMillis();
+
+        while (System.currentTimeMillis() - timestamp <= 35000) {
             NumberActivationOrder numberIdPhoneNumberForDelete = null;
 
             // Ищем обработанную заявку устройством, если такая есть
@@ -149,13 +148,18 @@ public class NumberBaseService implements NumberService {
                 log.warn(e.getMessage());
             }
         }
+
+        numberRepository.delete(newNumber);
+        numberActivationOrderComponent.getNumberActivationOrderList().remove(newNumberActivationOrder);
+
+        return ResponseEntity.noContent().build();
     }
 
     @Override
     public ResponseEntity<String> handleActivate(String apiKey, ru.panic.smsactivateservice.number.model.type.NumberService service, String country) throws JsonProcessingException {
-// Создаем новый номер в системе
 
-        merchantSecurity.secureByApiKey(apiKey);
+        // Создаем новый номер в системе
+
 
         Number newNumber = Number.builder()
                 .status("1")
@@ -171,15 +175,19 @@ public class NumberBaseService implements NumberService {
 
         numberRepository.save(newNumber);
 
-        numberActivationOrderComponent.getNumberActivationOrderList().add(NumberActivationOrder.builder()
+        NumberActivationOrder newNumberActivationOrder = NumberActivationOrder.builder()
                 .numberId(newNumber.getId())
                 .status(NumberActivationOrderStatus.FREE)
                 .timestamp(System.currentTimeMillis())
-                .build());
+                .build();
+
+        numberActivationOrderComponent.getNumberActivationOrderList().add(newNumberActivationOrder);
 
         // Ждем, пока физическое устройство начнет обработку заявки на активацию
 
-        while (true) {
+        long timestamp = System.currentTimeMillis();
+
+        while (System.currentTimeMillis() - timestamp <= 35000) {
             NumberActivationOrder numberIdPhoneNumberForDelete = null;
 
             // Ищем обработанную заявку устройством, если такая есть
@@ -216,12 +224,16 @@ public class NumberBaseService implements NumberService {
                 log.warn(e.getMessage());
             }
         }
+
+        numberRepository.delete(newNumber);
+        numberActivationOrderComponent.getNumberActivationOrderList().remove(newNumberActivationOrder);
+
+        return ResponseEntity.noContent().build();
     }
 
     //@Transactional(isolation = Isolation.READ_COMMITTED)
     @Override
     public ResponseEntity<String> handleSetActivationStatus(String apiKey, long id, String status) {
-        merchantSecurity.secureByApiKey(apiKey);
 
         Number number = numberRepository.findById(id).orElseThrow();
 
@@ -248,7 +260,6 @@ public class NumberBaseService implements NumberService {
 
     @Override
     public ResponseEntity<String> getActivationStatus(String apiKey, long id) {
-        merchantSecurity.secureByApiKey(apiKey);
 
         Number number = numberRepository.findById(id).orElseThrow();
 
@@ -290,7 +301,6 @@ public class NumberBaseService implements NumberService {
 
     @Override
     public ResponseEntity<String> getAllActivationData(String apiKey) throws JsonProcessingException {
-        merchantSecurity.secureByApiKey(apiKey);
 
         List<Number> numberList = numberRepository.findAllByMerchantAndStatusOrMerchantAndStatusOrderByActivationTimeDesc(
                 "6",
@@ -308,7 +318,6 @@ public class NumberBaseService implements NumberService {
 
     @Override
     public ResponseEntity<String> getAllServiceNumberCount(String apiKey) throws JsonProcessingException {
-        merchantSecurity.secureByApiKey(apiKey);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_HTML)
@@ -317,7 +326,6 @@ public class NumberBaseService implements NumberService {
 
     @Override
     public ResponseEntity<String> getBalance(String apiKey) {
-        merchantSecurity.secureByApiKey(apiKey);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_HTML)
@@ -326,7 +334,6 @@ public class NumberBaseService implements NumberService {
 
     @Override
     public ResponseEntity<String> getAllAvailableOperator(String apiKey) throws JsonProcessingException {
-        merchantSecurity.secureByApiKey(apiKey);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_HTML)
@@ -340,7 +347,6 @@ public class NumberBaseService implements NumberService {
 
     @Override
     public ResponseEntity<String> getAllAvailableCountry(String apiKey) throws JsonProcessingException {
-        merchantSecurity.secureByApiKey(apiKey);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_HTML)
@@ -360,7 +366,6 @@ public class NumberBaseService implements NumberService {
 
     @Override
     public ResponseEntity<String> getAllServicePrice(String apiKey) throws JsonProcessingException {
-        merchantSecurity.secureByApiKey(apiKey);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_HTML)
@@ -397,14 +402,20 @@ public class NumberBaseService implements NumberService {
     }
 
     @Override
-    public void updateActivationOrderPhoneNumber(long id, String phoneNumber) {
+    public UpdateActivationOrderPhoneNumberResponse updateActivationOrderPhoneNumber(long id, String phoneNumber) {
         for (NumberActivationOrder numberActivationOrder : numberActivationOrderComponent.getNumberActivationOrderList()) {
             if (numberActivationOrder.getNumberId() == id) {
                 numberActivationOrder.setPhoneNumber(phoneNumber);
 
-                return;
+                return UpdateActivationOrderPhoneNumberResponse.builder()
+                        .status("ok")
+                        .build();
             }
         }
+
+        return UpdateActivationOrderPhoneNumberResponse.builder()
+                .status("null")
+                .build();
     }
 
     @Override
@@ -413,6 +424,7 @@ public class NumberBaseService implements NumberService {
                 .orElse(null);
 
         principalNumber.setStatus("6");
+        principalNumber.setIsLastSeenUpdated(false);
 
         numberRepository.save(principalNumber);
 
