@@ -386,7 +386,8 @@ public class NumberBaseService implements NumberService {
     @Override
     public Object getRandomActivationOrderExactly() {
         return numberActivationOrderComponent.getAndMarkAsBusy()
-                .orElse(GetRandomActivationOrderExactlyResponse.builder().status("null").build());
+                .orElse(GetRandomActivationOrderExactlyResponse.builder()
+                        .status("null").build());
     }
 
     @Override

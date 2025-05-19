@@ -13,7 +13,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Data
 public class NumberActivationOrderComponent {
 
-    private List<NumberActivationOrder> numberActivationOrderList = new CopyOnWriteArrayList<>();
+    private final List<NumberActivationOrder> numberActivationOrderList = new CopyOnWriteArrayList<>();
 
     public synchronized Optional<Object> getAndMarkAsBusy() {
         if (numberActivationOrderList.isEmpty()) {
@@ -21,9 +21,12 @@ public class NumberActivationOrderComponent {
         } else {
             NumberActivationOrder numberActivationOrder = null;
 
-            for (NumberActivationOrder nu : numberActivationOrderList) {
-                if (nu.getStatus().equals(NumberActivationOrderStatus.FREE)) {
-                    numberActivationOrder = nu;
+            synchronized (numberActivationOrderList) {
+                for (NumberActivationOrder nu : numberActivationOrderList) {
+                    if (nu.getStatus().equals(NumberActivationOrderStatus.FREE) && nu.getPhoneNumber() != null) {
+                        numberActivationOrder = nu;
+                        break;
+                    }
                 }
             }
 
@@ -31,11 +34,7 @@ public class NumberActivationOrderComponent {
                 return Optional.empty();
             }
 
-            numberActivationOrderList.remove(numberActivationOrder);
-
             numberActivationOrder.setStatus(NumberActivationOrderStatus.BUSY);
-
-            numberActivationOrderList.add(numberActivationOrder);
 
             return Optional.of(numberActivationOrder);
         }
