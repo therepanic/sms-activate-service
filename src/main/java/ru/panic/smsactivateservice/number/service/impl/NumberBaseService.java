@@ -37,6 +37,7 @@ import java.util.*;
 @RequiredArgsConstructor
 @Slf4j
 public class NumberBaseService implements NumberService {
+
     private final NumberRepository numberRepository;
     private final SmsRepository smsRepository;
     private final MerchantRepository merchantRepository;
@@ -47,8 +48,6 @@ public class NumberBaseService implements NumberService {
     private final NumberActivationOrderComponent numberActivationOrderComponent;
     private final NumberActivationComponent numberActivationComponent;
     private final ObjectMapper objectMapper;
-
-
 
     @Override
     public GetStatusWithLastSeenUpdateResponse getStatusWithLastSeenUpdate(long id) {
@@ -111,7 +110,7 @@ public class NumberBaseService implements NumberService {
 
         long timestamp = System.currentTimeMillis();
 
-        while (System.currentTimeMillis() - timestamp <= 35000) {
+        while (System.currentTimeMillis() - timestamp <= 28000) {
             NumberActivationOrder numberIdPhoneNumberForDelete = null;
 
             // Ищем обработанную заявку устройством, если такая есть
@@ -187,7 +186,7 @@ public class NumberBaseService implements NumberService {
 
         long timestamp = System.currentTimeMillis();
 
-        while (System.currentTimeMillis() - timestamp <= 35000) {
+        while (System.currentTimeMillis() - timestamp <= 28000) {
             NumberActivationOrder numberIdPhoneNumberForDelete = null;
 
             // Ищем обработанную заявку устройством, если такая есть
@@ -403,13 +402,15 @@ public class NumberBaseService implements NumberService {
 
     @Override
     public UpdateActivationOrderPhoneNumberResponse updateActivationOrderPhoneNumber(long id, String phoneNumber) {
-        for (NumberActivationOrder numberActivationOrder : numberActivationOrderComponent.getNumberActivationOrderList()) {
-            if (numberActivationOrder.getNumberId() == id) {
-                numberActivationOrder.setPhoneNumber(phoneNumber);
+        synchronized (numberActivationOrderComponent.getNumberActivationOrderList()) {
+            for (NumberActivationOrder numberActivationOrder : numberActivationOrderComponent.getNumberActivationOrderList()) {
+                if (numberActivationOrder.getNumberId() == id && numberActivationOrder.getPhoneNumber() == null) {
+                    numberActivationOrder.setPhoneNumber(phoneNumber);
 
-                return UpdateActivationOrderPhoneNumberResponse.builder()
-                        .status("ok")
-                        .build();
+                    return UpdateActivationOrderPhoneNumberResponse.builder()
+                            .status("ok")
+                            .build();
+                }
             }
         }
 
@@ -436,4 +437,5 @@ public class NumberBaseService implements NumberService {
 
         return smsToSmsDtoMapper.smsToSmsDto(smsRepository.save(newSms));
     }
+
 }

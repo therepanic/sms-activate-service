@@ -5,15 +5,15 @@ import org.springframework.stereotype.Component;
 import ru.panic.smsactivateservice.number.model.NumberActivationOrder;
 import ru.panic.smsactivateservice.number.model.type.NumberActivationOrderStatus;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Component
 @Data
 public class NumberActivationOrderComponent {
-    private List<NumberActivationOrder> numberActivationOrderList = Collections.synchronizedList(new ArrayList<>());
+
+    private List<NumberActivationOrder> numberActivationOrderList = new CopyOnWriteArrayList<>();
 
     public synchronized Optional<Object> getAndMarkAsBusy() {
         if (numberActivationOrderList.isEmpty()) {
@@ -40,4 +40,5 @@ public class NumberActivationOrderComponent {
             return Optional.of(numberActivationOrder);
         }
     }
+
 }
