@@ -1,20 +1,14 @@
 package ru.panic.smsactivateservice.number.in;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.panic.smsactivateservice.number.dto.NumberDto;
 import ru.panic.smsactivateservice.number.dto.SmsDto;
-import ru.panic.smsactivateservice.number.model.NumberActivationOrder;
-import ru.panic.smsactivateservice.number.model.type.NumberActivationOrderStatus;
-import ru.panic.smsactivateservice.number.model.type.NumberService;
+import ru.panic.smsactivateservice.number.model.Number;
 import ru.panic.smsactivateservice.number.payload.CreateNumberSmsRequest;
 import ru.panic.smsactivateservice.number.payload.GetStatusWithLastSeenUpdateResponse;
-import ru.panic.smsactivateservice.number.payload.UpdateActivationOrderPhoneNumberResponse;
 import ru.panic.smsactivateservice.number.service.impl.NumberBaseService;
 
 import java.util.List;
-import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/v1/number")
@@ -28,14 +22,14 @@ public class NumberController {
         return numberBaseService.getStatusWithLastSeenUpdate(id);
     }
 
-    @GetMapping("/activationOrder/getAll")
-    public List<NumberActivationOrder> getAllActivationOrder() {
-        return numberBaseService.getAllActivationOrder();
+    @GetMapping("/smsOrder/getRandomSmsOrderExactly")
+    public String getRandomSmsOrderExactly() {
+        return numberBaseService.getRandomSmsOrderExactly();
     }
 
-    @GetMapping("/activationOrder/getRandomExactly")
-    public Object getRandomActivationOrderExactly() {
-        return numberBaseService.getRandomActivationOrderExactly();
+    @GetMapping("/activationOrder/getWorking")
+    public List<Object> getWorking() {
+        return numberBaseService.getWorking();
     }
 
     @PostMapping("/sms")
@@ -43,10 +37,16 @@ public class NumberController {
         return numberBaseService.createSms(createNumberSmsRequest);
     }
 
-    @PatchMapping("/activationOrder/updatePhoneNumber")
-    public UpdateActivationOrderPhoneNumberResponse updateActivationOrderPhoneNumber(@RequestParam("id") long id,
-                                                                                     @RequestParam("phoneNumber") String phoneNumber) {
-        return numberBaseService.updateActivationOrderPhoneNumber(id, phoneNumber);
+    @PatchMapping("/smsOrder/updateSms")
+    public void updateSmsOrderSms(@RequestParam("id") long id,
+                                  @RequestParam("sms") String sms,
+                                  @RequestParam("status") String status) {
+        numberBaseService.updateSmsOrderSms(id, sms, status);
+    }
+
+    @PostMapping("/activationOrder/all")
+    public void createAllActivationOrder(@RequestBody List<String> phoneNumbers) {
+        numberBaseService.createAllActivationOrder(phoneNumbers);
     }
 
 }

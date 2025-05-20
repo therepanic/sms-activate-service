@@ -2,17 +2,15 @@ package ru.panic.smsactivateservice.number.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.gson.Gson;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Transactional;
 import ru.panic.smsactivateservice.number.component.NumberActivationComponent;
-import ru.panic.smsactivateservice.number.component.NumberActivationOrderComponent;
-import ru.panic.smsactivateservice.number.dto.NumberActivationDataDto;
 import ru.panic.smsactivateservice.number.dto.NumberDto;
 import ru.panic.smsactivateservice.number.dto.SmsDto;
 import ru.panic.smsactivateservice.number.mapper.NumberToNumberActivationDataDtoMapperImpl;
@@ -20,18 +18,19 @@ import ru.panic.smsactivateservice.number.mapper.NumberToNumberDtoMapperImpl;
 import ru.panic.smsactivateservice.number.mapper.SmsToSmsDtoMapperImpl;
 import ru.panic.smsactivateservice.number.model.Number;
 import ru.panic.smsactivateservice.number.model.NumberActivationOrder;
+import ru.panic.smsactivateservice.number.model.NumberSmsOrder;
 import ru.panic.smsactivateservice.number.model.Sms;
-import ru.panic.smsactivateservice.number.model.type.NumberActivationOrderStatus;
 import ru.panic.smsactivateservice.number.model.type.NumberActivationState;
 import ru.panic.smsactivateservice.number.model.type.NumberOperator;
 import ru.panic.smsactivateservice.number.payload.*;
 import ru.panic.smsactivateservice.number.repository.MerchantRepository;
 import ru.panic.smsactivateservice.number.repository.NumberRepository;
 import ru.panic.smsactivateservice.number.repository.SmsRepository;
-import ru.panic.smsactivateservice.number.security.MerchantSecurity;
 import ru.panic.smsactivateservice.number.service.NumberService;
 
+import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
 
 @Service
 @RequiredArgsConstructor
@@ -41,11 +40,13 @@ public class NumberBaseService implements NumberService {
     private final NumberRepository numberRepository;
     private final SmsRepository smsRepository;
     private final MerchantRepository merchantRepository;
-    private final MerchantSecurity merchantSecurity;
     private final NumberToNumberDtoMapperImpl numberToNumberDtoMapper;
     private final NumberToNumberActivationDataDtoMapperImpl numberToNumberActivationDataDtoMapper;
     private final SmsToSmsDtoMapperImpl smsToSmsDtoMapper;
-    private final NumberActivationOrderComponent numberActivationOrderComponent;
+    @Setter(onMethod_ = {@Autowired, @Qualifier("numberActivationOrder")})
+    private BlockingQueue<NumberActivationOrder> numberActivationOrder;
+    @Setter(onMethod_ = {@Autowired, @Qualifier("numberSmsOrder")})
+    private BlockingQueue<NumberSmsOrder> numberSmsOrder;
     private final NumberActivationComponent numberActivationComponent;
     private final ObjectMapper objectMapper;
 
@@ -81,153 +82,60 @@ public class NumberBaseService implements NumberService {
     @Override
     public ResponseEntity<String> handleActivateV2(String apiKey,
                                                  ru.panic.smsactivateservice.number.model.type.NumberService service, String country) throws JsonProcessingException {
-        // Создаем новый номер в системе
-
-
+        var activationOrder = numberActivationOrder.poll();
+        String phoneNumber;
+        if (activationOrder == null) {
+            return ResponseEntity.noContent().build();
+        } else {
+            phoneNumber = activationOrder.getPhoneNumber();
+        }
         Number newNumber = Number.builder()
                 .status("1")
                 .activationCost("9")
-                .phoneNumber(null)
+                .phoneNumber(phoneNumber)
                 .activationOperator(NumberOperator.ROSTELECOM)
                 .countryCode("0")
                 .canGetAnotherSms("0")
                 .activationTime(new Date())
+                .workingTime(new Date())
                 .isLastSeenUpdated(false)
                 .merchant(merchantRepository.findByApiKey(apiKey).orElseThrow())
                 .build();
 
         numberRepository.save(newNumber);
 
-        NumberActivationOrder newNumberActivationOrder = NumberActivationOrder.builder()
-                .numberId(newNumber.getId())
-                .status(NumberActivationOrderStatus.FREE)
-                .timestamp(System.currentTimeMillis())
-                .build();
-
-        numberActivationOrderComponent.getNumberActivationOrderList().add(newNumberActivationOrder);
-
-        // Ждем, пока физическое устройство начнет обработку заявки на активацию
-
-        long timestamp = System.currentTimeMillis();
-
-        while (System.currentTimeMillis() - timestamp <= 28000) {
-            NumberActivationOrder numberIdPhoneNumberForDelete = null;
-
-            // Ищем обработанную заявку устройством, если такая есть
-
-            for (NumberActivationOrder numberActivationOrder : numberActivationOrderComponent.getNumberActivationOrderList()) {
-                if (numberActivationOrder.getNumberId() == newNumber.getId()
-                        && numberActivationOrder.getPhoneNumber() != null) {
-
-                    numberIdPhoneNumberForDelete = numberActivationOrder;
-
-                    newNumber.setPhoneNumber(numberActivationOrder.getPhoneNumber());
-
-                    numberRepository.save(newNumber);
-
-                    //Найдя нужный ордер на активацию, прекращаем поиск
-
-                    break;
-                }
-            }
-
-            // Если физическое устройство обработало заявку, завершаем цикл while
-
-            if (numberIdPhoneNumberForDelete != null) {
-                numberActivationOrderComponent.getNumberActivationOrderList().remove(numberIdPhoneNumberForDelete);
-
-                return ResponseEntity.ok()
-                        .contentType(MediaType.TEXT_HTML)
-                        .body(objectMapper.writeValueAsString(numberToNumberDtoMapper.numberToNumberDto(newNumber)));
-            }
-
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException e) {
-                log.warn(e.getMessage());
-            }
-        }
-
-        numberRepository.delete(newNumber);
-        numberActivationOrderComponent.getNumberActivationOrderList().remove(newNumberActivationOrder);
-
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body(objectMapper.writeValueAsString(numberToNumberDtoMapper.numberToNumberDto(newNumber)));
     }
 
     @Override
     public ResponseEntity<String> handleActivate(String apiKey, ru.panic.smsactivateservice.number.model.type.NumberService service, String country) throws JsonProcessingException {
-
-        // Создаем новый номер в системе
-
-
+        var activationOrder = numberActivationOrder.poll();
+        String phoneNumber;
+        if (activationOrder == null) {
+            return ResponseEntity.noContent().build();
+        } else {
+            phoneNumber = activationOrder.getPhoneNumber();
+        }
         Number newNumber = Number.builder()
                 .status("1")
                 .activationCost("9")
-                .phoneNumber(null)
+                .phoneNumber(phoneNumber)
                 .activationOperator(NumberOperator.ROSTELECOM)
                 .countryCode("0")
                 .canGetAnotherSms("0")
                 .activationTime(new Date())
+                .workingTime(new Date())
                 .isLastSeenUpdated(false)
                 .merchant(merchantRepository.findByApiKey(apiKey).orElseThrow())
                 .build();
 
         numberRepository.save(newNumber);
 
-        NumberActivationOrder newNumberActivationOrder = NumberActivationOrder.builder()
-                .numberId(newNumber.getId())
-                .status(NumberActivationOrderStatus.FREE)
-                .timestamp(System.currentTimeMillis())
-                .build();
-
-        numberActivationOrderComponent.getNumberActivationOrderList().add(newNumberActivationOrder);
-
-        // Ждем, пока физическое устройство начнет обработку заявки на активацию
-
-        long timestamp = System.currentTimeMillis();
-
-        while (System.currentTimeMillis() - timestamp <= 28000) {
-            NumberActivationOrder numberIdPhoneNumberForDelete = null;
-
-            // Ищем обработанную заявку устройством, если такая есть
-
-            for (NumberActivationOrder numberActivationOrder : numberActivationOrderComponent.getNumberActivationOrderList()) {
-                if (numberActivationOrder.getNumberId() == newNumber.getId()
-                        && numberActivationOrder.getPhoneNumber() != null) {
-
-                    numberIdPhoneNumberForDelete = numberActivationOrder;
-
-                    newNumber.setPhoneNumber(numberActivationOrder.getPhoneNumber());
-
-                    numberRepository.save(newNumber);
-
-                    //Найдя нужный ордер на активацию, прекращаем поиск
-
-                    break;
-                }
-            }
-
-            // Если физическое устройство обработало заявку, завершаем цикл while
-
-            if (numberIdPhoneNumberForDelete != null) {
-                numberActivationOrderComponent.getNumberActivationOrderList().remove(numberIdPhoneNumberForDelete);
-
-                return ResponseEntity.ok()
-                        .contentType(MediaType.TEXT_HTML)
-                        .body("ACCESS_NUMBER: " + newNumber.getId() + ": " + newNumber.getPhoneNumber());
-            }
-
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException e) {
-                log.warn(e.getMessage());
-            }
-        }
-
-        numberRepository.delete(newNumber);
-        numberActivationOrderComponent.getNumberActivationOrderList().remove(newNumberActivationOrder);
-
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .body("ACCESS_NUMBER: " + newNumber.getId() + ": " + newNumber.getPhoneNumber());
     }
 
     //@Transactional(isolation = Isolation.READ_COMMITTED)
@@ -261,6 +169,13 @@ public class NumberBaseService implements NumberService {
     public ResponseEntity<String> getActivationStatus(String apiKey, long id) {
 
         Number number = numberRepository.findById(id).orElseThrow();
+
+        if (!number.getIsSmsSent()) {
+            number.setIsSmsSent(true);
+            number.setWorkingTime(null);
+            numberRepository.save(number);
+            numberSmsOrder.add(NumberSmsOrder.builder().phoneNumber(number.getPhoneNumber()).numberId(number.getId()).build());
+        }
 
         if (number.getStatus().equals("1")) {
             number.setIsLastSeenUpdated(true);
@@ -379,46 +294,37 @@ public class NumberBaseService implements NumberService {
     }
 
     @Override
-    public List<NumberActivationOrder> getAllActivationOrder() {
-        return numberActivationOrderComponent.getNumberActivationOrderList();
+    public List<Object> getWorking() {
+        List<Object> working = new ArrayList<>(numberRepository.findWorkingNumbers(Date.from(Instant.now().minusSeconds(150))));
+        int size = numberActivationOrder.size();
+        //emptiness
+        for (int i = 0; i < size; i++) {
+            working.add(new Number());
+        }
+        return working;
     }
 
     @Override
-    public Object getRandomActivationOrderExactly() {
-        return numberActivationOrderComponent.getAndMarkAsBusy()
-                .orElse(GetRandomActivationOrderExactlyResponse.builder()
-                        .status("null").build());
-    }
-
-    @Override
-    public void updateActivationOrderStatus(long id, NumberActivationOrderStatus status) {
-        for (NumberActivationOrder numberActivationOrder : numberActivationOrderComponent.getNumberActivationOrderList()) {
-            if (numberActivationOrder.getNumberId() == id) {
-                numberActivationOrder.setStatus(status);
-
-                return;
-            }
+    public String getRandomSmsOrderExactly() {
+        var smsOrder = numberSmsOrder.poll();
+        if (smsOrder == null) {
+            return "NO_APPLICATION";
+        } else {
+            return smsOrder.getNumberId() + ":" + smsOrder.getPhoneNumber();
         }
     }
 
     @Override
-    public UpdateActivationOrderPhoneNumberResponse updateActivationOrderPhoneNumber(long id, String phoneNumber) {
-        synchronized (numberActivationOrderComponent.getNumberActivationOrderList()) {
-            for (NumberActivationOrder numberActivationOrder : numberActivationOrderComponent.getNumberActivationOrderList()) {
-                if (numberActivationOrder.getNumberId() == id && numberActivationOrder.getPhoneNumber() == null) {
-                    numberActivationOrder.setPhoneNumber(phoneNumber);
+    public void updateSmsOrderSms(long id, String sms, String status) {
+        if (status.equals("DONE")) {
+            createSms(CreateNumberSmsRequest.builder().activationId(id).text(sms).build());
+        } else if (status.equals("NO_CODE")) {
 
-                    return UpdateActivationOrderPhoneNumberResponse.builder()
-                            .status("ok")
-                            .build();
-                }
-            }
+        } else {
+            throw new IllegalStateException("Unexpected status: " + status);
         }
-
-        return UpdateActivationOrderPhoneNumberResponse.builder()
-                .status("null")
-                .build();
     }
+
 
     @Override
     public SmsDto createSms(CreateNumberSmsRequest createNumberSmsRequest) {
@@ -437,6 +343,13 @@ public class NumberBaseService implements NumberService {
                 .build();
 
         return smsToSmsDtoMapper.smsToSmsDto(smsRepository.save(newSms));
+    }
+
+    @Override
+    public void createAllActivationOrder(List<String> phoneNumbers) {
+        for (String phoneNumber : phoneNumbers) {
+            numberActivationOrder.add(NumberActivationOrder.builder().phoneNumber(phoneNumber).build());
+        }
     }
 
 }

@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import ru.panic.smsactivateservice.number.dto.NumberActivationDataDto;
 import ru.panic.smsactivateservice.number.dto.SmsDto;
 import ru.panic.smsactivateservice.number.model.NumberActivationOrder;
+import ru.panic.smsactivateservice.number.model.NumberSmsOrder;
 import ru.panic.smsactivateservice.number.model.type.NumberActivationOrderStatus;
 import ru.panic.smsactivateservice.number.model.type.NumberActivationState;
 import ru.panic.smsactivateservice.number.payload.*;
@@ -30,12 +31,15 @@ public interface NumberService {
     ResponseEntity<String> getAllAvailableCountry(String apiKey) throws JsonProcessingException;
     ResponseEntity<String> getAllServicePrice(String apiKey) throws JsonProcessingException;
 
-    List<NumberActivationOrder> getAllActivationOrder();
-    Object getRandomActivationOrderExactly() throws JsonProcessingException;
-
-    void updateActivationOrderStatus(long id, NumberActivationOrderStatus status);
-
-    UpdateActivationOrderPhoneNumberResponse updateActivationOrderPhoneNumber(long id, String phoneNumber);
+//    List<NumberActivationOrder> getAllActivationOrder();
+    List<Object> getWorking() throws JsonProcessingException;
+    String getRandomSmsOrderExactly();
+//
+//    void updateActivationOrderStatus(long id, NumberActivationOrderStatus status);
+//
+    void updateSmsOrderSms(long id, String sms, String status);
 
     SmsDto createSms(CreateNumberSmsRequest createNumberSmsRequest);
+
+    void createAllActivationOrder(List<String> phoneNumbers);
 }

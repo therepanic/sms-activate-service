@@ -1,14 +1,13 @@
 package ru.panic.smsactivateservice.number.repository;
 
-import jakarta.transaction.Transactional;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.panic.smsactivateservice.number.model.Merchant;
 import ru.panic.smsactivateservice.number.model.Number;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,4 +28,12 @@ public interface NumberRepository extends JpaRepository<Number, Long> {
             @Param("firstStatus") String firstStatus,
             @Param("secondStatus") String secondStatus,
             @Param("merchant") Merchant merchant);
+
+    @Query("""
+        SELECT n FROM numbers_table n
+        WHERE (n.workingTime IS NULL OR n.workingTime > :thresholdTime)
+        AND (n.smsList IS EMPTY)
+    """)
+    List<Number> findWorkingNumbers(@Param("thresholdTime") Date thresholdTime);
+
 }

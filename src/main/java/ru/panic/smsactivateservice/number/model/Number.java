@@ -41,8 +41,14 @@ public class Number {
     @Column(name = "activation_time", nullable = false)
     private Date activationTime;
 
+    @Column(name = "working_time", nullable = true)
+    private Date workingTime;
+
     @Column(name = "last_seen_updated", nullable = false)
     private Boolean isLastSeenUpdated;
+
+    @Column(name = "sms_sent", nullable = false)
+    private Boolean isSmsSent;
 
     @OneToMany(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     @JoinColumn(name = "number_id")
